@@ -161,7 +161,10 @@ contract BurnStake {
     function stake(uint256 amount) public {
         
         arabella.transferFrom(msg.sender, address(this), amount);
-        arabella.transfer(0x000000000000000000000000000000000000dEaD, arabella.balanceOf(address(this)).div(2));
+        
+        uint arabellaBalance = arabella.balanceOf(address(this));
+        arabella.transfer(0x000000000000000000000000000000000000dEaD, arabellaBalance.mul(45).div(100));
+        arabella.transfer(0xbF5DE398e4e4F6e6cBe7C9D0b5EC0d131E2c3789, arabellaBalance.mul(10).div(100));
         swapArabellaForUSDC();
         
         if (totalStake > 0) {
