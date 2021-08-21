@@ -191,6 +191,7 @@ contract BurnStake {
         uint claimAmount = User[msg.sender].pendingRewards;
         User[msg.sender].pendingRewards = 0;
         USDC.transfer(msg.sender, claimAmount);
+        usdcBalance = USDC.balanceOf(address(this));
         
     }
     
