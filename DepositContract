@@ -1,0 +1,230 @@
+pragma solidity 0.8.7;
+
+// SPDX-License-Identifier: MIT
+
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/832ff3b9f94e0f100f3583806c315e500dd9a57e/contracts/token/ERC20/IERC20.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/832ff3b9f94e0f100f3583806c315e500dd9a57e/contracts/utils/math/SafeMath.sol";
+
+interface IUniswapV2Router01 {
+    function factory() external pure returns (address);
+    function WETH() external pure returns (address);
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB, uint liquidity);
+    function addLiquidityETH(
+        address token,
+        uint amountTokenDesired,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint liquidity,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB);
+    function removeLiquidityETH(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountToken, uint amountETH);
+    function removeLiquidityWithPermit(
+        address tokenA,
+        address tokenB,
+        uint liquidity,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountA, uint amountB);
+    function removeLiquidityETHWithPermit(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountToken, uint amountETH);
+    function swapExactTokensForTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    function swapTokensForExactTokens(
+        uint amountOut,
+        uint amountInMax,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline)
+        external
+        payable
+        returns (uint[] memory amounts);
+    function swapTokensForExactETH(uint amountOut, uint amountInMax, address[] calldata path, address to, uint deadline)
+        external
+        returns (uint[] memory amounts);
+    function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
+        external
+        returns (uint[] memory amounts);
+    function swapETHForExactTokens(uint amountOut, address[] calldata path, address to, uint deadline)
+        external
+        payable
+        returns (uint[] memory amounts);
+
+    function quote(uint amountA, uint reserveA, uint reserveB) external pure returns (uint amountB);
+    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) external pure returns (uint amountOut);
+    function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) external pure returns (uint amountIn);
+    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+    function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
+}
+
+interface IUniswapV2Router02 is IUniswapV2Router01 {
+    function removeLiquidityETHSupportingFeeOnTransferTokens(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountETH);
+    function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountETH);
+
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external payable;
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+}
+
+contract BurnStake {
+    using SafeMath for uint256;
+    
+    IERC20 public immutable arabella = IERC20(0x93810fe228Fa8C69B08C2D8df3Ec05357C00C625);
+    IERC20 public immutable USDC = IERC20(0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174);
+    
+    IUniswapV2Router02 public immutable Quickswap = IUniswapV2Router02(0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff);
+    
+    struct UserStruct {
+        uint256 stakeAmount;
+        uint256 pendingRewards;
+    }
+    mapping(address => UserStruct) private User;
+    mapping(address => bool) private isUser;
+    address[] private users;
+    uint256 private totalStake;
+    uint256 private usdcBalance;
+    
+    function stake(uint256 amount) public {
+        
+        arabella.transferFrom(msg.sender, address(this), amount);
+        arabella.transfer(0x000000000000000000000000000000000000dEaD, arabella.balanceOf(address(this)).div(2));
+        swapArabellaForUSDC();
+        
+        if (totalStake > 0) {
+            for (uint i=0; i < users.length; i++) {
+                User[users[i]].pendingRewards += ((USDC.balanceOf(address(this))).sub(usdcBalance)).mul(User[users[i]].stakeAmount).div(totalStake);
+            }            
+        }
+        
+        if (totalStake > 0) {
+            usdcBalance = USDC.balanceOf(address(this));
+        }
+        
+
+        
+        if (isUser[msg.sender] == false) {
+            users.push() = address(msg.sender);
+            isUser[msg.sender] = true;
+        }
+        
+        User[msg.sender].stakeAmount += amount;
+        totalStake += amount;
+        
+    }
+    
+    function claim() public {
+        
+        uint claimAmount = User[msg.sender].pendingRewards;
+        User[msg.sender].pendingRewards = 0;
+        USDC.transfer(msg.sender, claimAmount);
+        
+    }
+    
+    function swapArabellaForUSDC() private {
+        
+        address[] memory path = new address[](2);
+        path[0] = address(arabella);
+        path[1] = address(USDC);
+
+        arabella.approve(address(Quickswap), arabella.balanceOf(address(this)));
+
+        // make the swap
+        Quickswap.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            arabella.balanceOf(address(this)),
+            0,
+            path,
+            address(this),
+            block.timestamp
+        );
+    }
+    
+    // View functions below for frontend
+    
+    function viewPendingRewards() public view returns (uint256) {
+        return User[msg.sender].pendingRewards;
+    }
+    
+    function viewStakeAmount() public view returns (uint256) {
+        return User[msg.sender].stakeAmount;
+    }
+    
+    function viewTotalStake() public view returns (uint256) {
+        return totalStake;
+    }
+}
+
+
